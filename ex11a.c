@@ -13,17 +13,40 @@
 #include "mynet.h"
 #include "myprog.h"
 
+/*
+np - общее количество процессов для данного приложения. Возвращается MyNetInit().
+mp - Означает номер текущего процесса. Для каждого процесса разный. Меньше np-1.
+nl - Длина имени процессора... Бесполезна для тебя.
+ier - Переменная куда будут класть код ошибки. Для си 0 означает успешность завершения.
+lp - доп пораметр которой показывает, нужно ли выводить подробные данные в файл. Например все прогоночные коэффициенты.
+*/
 int np, mp, nl, ier, lp;
+//pname - Сюда положат имя машины на которой идут вычисления.
 char pname[MPI_MAX_PROCESSOR_NAME];
+//sname - тут лежит имя выходного файла. В процессе программы, каждый процесс изменит это имя и создаст свой выходной файл.
 char sname[10] = "ex11a.p00";
 MPI_Status status;
+//buf - буфер для обмена данными между процессами. нужен для MPI
 union_t buf;
+//Это переменные времени. Нужны чтобы знать длину тика машины и замерять время выполнения вычислений.
 double tick, t1, t2, t3;
 
+//Файловые дескрипторы для входного файла с данными и выходных файлов *.p??
 FILE *Fi = NULL;
 FILE *Fo = NULL;
 
+//nx - Количество точек разбиения по x.
 int nx;
+/*
+xa - Задает левую границу вычисляемого промежутка.
+xb - Задает правую границу вычисляемого промежутка.
+для х из [2, 5], xa = 2; xb = 5;
+
+ua,ub - Г.У. на концах промежутка.
+ak - нужно якобы для удобства... по сути 1/(b-a)^2. Используется при вычислении k и q.
+px - pi/(2*(b-a))
+px2 - px^2
+*/
 double xa, xb, ua, ub, ak, px, px2;
 
 double k(double x);
@@ -63,19 +86,31 @@ double f(double x) {
 
 int main(int argc, char *argv[])
 {
+  /*
+    i - переменные для итераций в циклах for.
+    j - тут вспомогательная переменная.
+    i1,i2 - диапазон вычислений для данного процесса. Например если участок разбивается на 100 частей, а у нас 10 процессов. то
+    значения i1, i2 будут: [0,9],[10,19]...
+    nc - разница i2 и i1. Общее количество точек разбиения которые вычисляет данный процесс.
+    ncm -
+    ncp -
+    ncx -
+  */
   int i, j, i1, i2, nc, ncm, ncp, ncx;
   double hx, hx2, s0, s1, s2, a0, b0, c0, f0, a1, b1, c1, f1;
   double *xx, *aa, *bb, *cc, *dd, *ee, *ff, *al, *y1, *y2, *y3, *y4;
 
+  //Инициализация MPI.
   MyNetInit(&argc,&argv,&np,&mp,&nl,pname,&tick);
 
   fprintf(stderr,"Netsize: %d, process: %d, system: %s, tick=%12le\n",np,mp,pname,tick);
   sleep(1);
-
+  //Инициализируем файлы вывода. каждый процесс создает свой файл используя в названии файла свой номер в системе MPI (mp)
   sprintf(sname+7,"%02d",mp);
   ier = fopen_m(&Fo,sname,"wt");
   if (ier!=0) mpierr("Protocol file not opened",1);
 
+// Полчуаем входные данные из файла если это нулевой процесс.
   if (mp==0) {
     ier = fopen_m(&Fi,"ex11a.d","rt");
     if (ier!=0) mpierr("Data file not opened",2);
@@ -86,9 +121,11 @@ int main(int argc, char *argv[])
     i = fscanf(Fi,"nx=%d\n",&nx);
     i = fscanf(Fi,"lp=%d\n",&lp);
     fclose_m(&Fi);
+    //Получаем необходимое количество точек разбиения для вычисления задачи.
     if (argc>1) sscanf(argv[1],"%d",&nx);
   }
 
+  //  Если запущено больше одного процесса, то 0 процесс делится входными данными с остальными.
   if (np>1) {
     if (mp==0) {
       buf.ddata[0] = xa; buf.ddata[1] = xb;
@@ -111,12 +148,19 @@ int main(int argc, char *argv[])
   ak = 1.0/((xb-xa)*(xb-xa)); px = 0.5*pi/(xb-xa); px2 = px*px;
 
   hx = (xb-xa)/nx; hx2 = hx * hx;
-
+  //функция из mynet. Описание там.
   MyRange(np,mp,0,nx,&i1,&i2,&nc);
   ncm = nc-1; ncp = 2*(np-1); ncx = imax(nc,ncp);
 
   fprintf(Fo,"i1=%d i2=%d nc=%d\n",i1,i2,nc);
 
+  /*
+  Создаются массивы для:
+xx  - разбиение икса
+aa, bb, cc, ff - коэффициенты перед Yi в прогонке.
+al -
+y1 -
+  */
   xx = (double*)(malloc(sizeof(double)*nc));
   aa = (double*)(malloc(sizeof(double)*ncx));
   bb = (double*)(malloc(sizeof(double)*ncx));
@@ -124,10 +168,10 @@ int main(int argc, char *argv[])
   ff = (double*)(malloc(sizeof(double)*ncx));
   al = (double*)(malloc(sizeof(double)*ncx));
   y1 = (double*)(malloc(sizeof(double)*nc));
-
+  //укладываем значения по икс в точках разбиения.
   for (i=0; i<nc; i++)
     xx[i] = xa + hx * (i1 + i);
-
+// задаем первые коэффициенты для каждого процесса. для нулевого процесса это нулевые (краевые) условия. В семинарах есть.
   if (mp==0) {
     aa[0] = 0.0; bb[0] = 0.0; cc[0] = 1.0; ff[0] = ua;
   }
@@ -138,7 +182,8 @@ int main(int argc, char *argv[])
     cc[0] = hx2 * q(xx[0]) + aa[0] + bb[0];
     ff[0] = hx2 * f(xx[0]);
   }
-
+// Вычисляем все остальные коэффициенты вплоть до последнего у каждого процесса
+// это нужно потому что последнее значение нужно не вычислять а задать. Гугли метод прогонки.
   for (i=1; i<ncm; i++) {
     s0 = k(xx[i]); s1 = k(xx[i-1]); s2 = k(xx[i+1]);
     aa[i] = 0.5 * (s0 + s1);
@@ -146,7 +191,7 @@ int main(int argc, char *argv[])
     cc[i] = hx2 * q(xx[i]) + aa[i] + bb[i];
     ff[i] = hx2 * f(xx[i]);
   }
-
+// Задаем последние коэффициенты для каждого процесса.
   if (mp==np-1) {
     aa[ncm] = 0.0; bb[ncm] = 0.0; cc[ncm] = 1.0; ff[ncm] = ub;
   }
@@ -157,12 +202,12 @@ int main(int argc, char *argv[])
     cc[ncm] = hx2 * q(xx[ncm]) + aa[ncm] + bb[ncm];
     ff[ncm] = hx2 * f(xx[ncm]);
   }
-
+// если нужно, то выводим все в файл вывода.
   if (lp>0)
     for (i=0; i<nc; i++)
       fprintf(Fo,"i=%8d a=%12le b=%12le c=%12le f=%12le\n",
         i,aa[i],bb[i],cc[i],ff[i]);
-
+// если у нас один процесс, то считаем все просто методом правой прогонки. else  Много кода, разбирай сам)
   if (np<2) {
     ier = prog_right(nc,aa,bb,cc,ff,al,y1);
     if (ier!=0) mpierr("Bad solution 1",1);
