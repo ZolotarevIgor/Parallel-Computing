@@ -24,9 +24,9 @@ ex04b: mycom.c ex04b.c
 ex05а: mycom.c ex05а.c
 	gcc -o ex05a.px -O2 -lm ex05а.c mycom.c
 ex05b: mycom.c ex05b.c
-    gcc -o ex05b.px -O2 -lm -pthread ex05b.c mycom.c
+	gcc -o ex05b.px -O2 -lm -pthread ex05b.c mycom.c
 ex05c: mycom.c ex05c.c
-   	gcc -o ex05c.px -O2 -lm -fopenmp ex05c.c mycom.c
+	gcc -o ex05c.px -O2 -lm -fopenmp ex05c.c mycom.c
 
 ex06a: ex06a.c
 	mpicc -o ex06a.px -O2 -lm ex06a.c
