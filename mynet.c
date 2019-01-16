@@ -89,27 +89,35 @@ void My2DGrid(int np, int mp, int n1, int n2,
   return;
 }
 
+//nsl - number of bsl...
 void BndExch1D(int np, int mp, int nsl, int nrl, int nsr, int nrr,
                double *bsl, double *brl, double *bsr, double *brr)
 {
   MPI_Status status;
+  /*
+  Операция send-receive комбинирует в одном обращении посылку сообщения одному получателю и прием сообщения от другого отправителя. Получателем и отправителем может быть тот же самый процесс. Эта операция весьма полезна для выполнения сдвига по цепи процессов. Если для такого сдвига были использованы блокирующие приемы и передачи, тогда нужно корректно упорядочить эти приемы и передачи (например, четные процессы передают, затем принимают, нечетные процессы сначала принимают, затем передают) так, чтобы предупредить циклические зависимости, которые могут привести к дедлоку.
+  */
 
   if (mp%2==0) {
     if (mp+1<np)
+    //Если это процесс с четным номером и не последний процесс, то отправляем следующему номеру bsr и получаем от него bsr
       MPI_Sendrecv(bsr,nsr,MPI_DOUBLE,mp+1,0,
                    brr,nrr,MPI_DOUBLE,mp+1,0,
                    MPI_COMM_WORLD,&status);
     if (mp>0)
+    //Если это процесс с четным номером и не первый процесс, то отправляем предыдущему номеру bsl и получаем от него brl
       MPI_Sendrecv(bsl,nsl,MPI_DOUBLE,mp-1,0,
                    brl,nrl,MPI_DOUBLE,mp-1,0,
                    MPI_COMM_WORLD,&status);
   }
   else {
     if (mp>0)
+    //Если это процесс с нечетным номером и не первый процесс, то отправляем предыдущему номеру bsl и получаем от него brl
       MPI_Sendrecv(bsl,nsl,MPI_DOUBLE,mp-1,0,
                    brl,nrl,MPI_DOUBLE,mp-1,0,
                    MPI_COMM_WORLD,&status);
     if (mp+1<np)
+    //Если это процесс с нечетным номером и не последний процесс, то отправляем следующему номеру bsr и получаем от него bsr
       MPI_Sendrecv(bsr,nsr,MPI_DOUBLE,mp+1,0,
                    brr,nrr,MPI_DOUBLE,mp+1,0,
                    MPI_COMM_WORLD,&status);
